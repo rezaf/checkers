@@ -1,11 +1,9 @@
-require_relative 'board.rb'
-
 class InvalidMoveError < RuntimeError
 end
 
 class Piece
   
-  attr_reader :color :pos :board
+  attr_accessor :color, :pos, :board
   
   W_PAWN_DIFFS = [[1, 1], [-1, 1]]
   B_PAWN_DIFFS = [[1, -1], [-1, -1]]
@@ -19,19 +17,19 @@ class Piece
   end
   
   def perform_slide(from, to, board) 
-    if slide_legal?(from, to)
+    if slide_legal?(from, to, board)
       board[from], board[to] = nil, board[from]
       @pos = to
       maybe_promote
+      true
     else
-      return false
+      false
     end
-    true
   end
   
   def slide_legal?(from, to, board)
     return false unless board[to].nil?
-    proposed_move = [to[0] - from[0], to[1]] - from[1]]
+    proposed_move = [to[0] - from[0], to[1] - from[1]]
     
     if @king
       legal_move = KING_DIFFS.include?(proposed_move)
@@ -45,7 +43,7 @@ class Piece
   end
   
   def perform_jump(from, to, board)
-    jumps = legal_jumps(from, to)
+    jumps = legal_jumps(from, to, board)
     
     unless jumps.empty?
       board[from], board[to] = nil, board[from]
@@ -66,29 +64,30 @@ class Piece
   
   def legal_jumps(from, to, board)
     possible_moves = []
-    move_diffs.each do |move|
-      possible_moves << move if board[move].color != @color
+    move_diffs(from).each do |move|
+      p move
+      possible_moves << move if !board[move].nil? && board[move].color != color
     end
     possible_moves
   end
   
-  def perform_moves!(move_sequence, board)
-    move_sequence[0...-1].each_index do |index|
-      from, to = move_sequence[index], move[index + 1]
-      if perform_jump(from, to)
-        nil
-      elsif perform_slide(from, to)
-        break
+  def perform_moves!(move_arr, board)
+    move_arr[0...-1].each_index do |index|
+      from, to = move_arr[index], move_arr[index + 1]
+      if perform_jump(from, to, board)
+        return true
+      elsif perform_slide(from, to, board)
+        return true
       else
         raise InvalidMoveError
       end
     end
   end
   
-  def valid_move_seq?(move_sequence)
+  def valid_move_seq?(move_arr)
     dup_board = deep_dup
       
-    !!perform_moves!(move_sequence, dup_board)# ? true : false
+    !!perform_moves!(move_arr, dup_board)
   end
   
   def deep_dup
@@ -96,10 +95,10 @@ class Piece
     (0..7).each do |x|
       (0..7).each do |y|
         position = [x, y]
-        next if self[position].nil?
-        color = self[position].color
+        next if board[position].nil?
+        color = board[position].color
         dup_board[position] = 
-          self[position].class.new(position, color, dup_board)
+          board[position].class.new(position, color, dup_board)
       end
     end
     
@@ -107,8 +106,14 @@ class Piece
   end
   
   def perform_moves(move_sequence)
-    if valid_move_seq?(move_sequence)
-      perform_moves!(move_sequence, self)
+    move_arr = []
+    until move_sequence.empty?
+      move_str = move_sequence.shift
+      move_arr << move_str.split(",").map! { |num| Integer(num) }
+    end
+    
+    if valid_move_seq?(move_arr)
+      perform_moves!(move_arr, self)
     else
       raise InvalidMoveError
     end
@@ -116,18 +121,18 @@ class Piece
   
   def move_diffs(from)
     move_diff(from).select do |move|
-      move[0].between(0, 7) && move[1].between(0, 7)
+      move[0].between?(0, 7) && move[1].between?(0, 7)
     end
   end
   
   def move_diff(from)
     diffs = [] 
     if @king
-      diffs = KING_DIFFS.map { |move| [move[0] + from[0], move[1] + from[1] }
-    elsif @color = :white
-      diffs = W_PAWN_DIFFS.map { |move| [move[0] + from[0], move[1] + from[1] }
+      diffs = KING_DIFFS.map { |move| [move[0] + from[0], move[1] + from[1]] }
+    elsif @color == :white
+      diffs = W_PAWN_DIFFS.map { |move| [move[0] + from[0], move[1] + from[1]] }
     else
-      diffs = B_PAWN_DIFFS.map { |move| [move[0] + from[0], move[1] + from[1] }
+      diffs = B_PAWN_DIFFS.map { |move| [move[0] + from[0], move[1] + from[1]] }
     end 
     diffs
   end
